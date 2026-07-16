@@ -22,7 +22,9 @@ Add this repository variable or secret:
 
 Alternatively, you can skip `SLACK_BOT_TOKEN` and `SLACK_USER_ID` and add `SLACK_WEBHOOK_URL` as a repository secret for channel webhook delivery instead.
 
-The workflow is in `.github/workflows/rentman-led-check.yml`. It runs daily and can also be started manually from the GitHub Actions tab. Manual runs support a `dry_run` option that prints the Slack message without sending it.
+The workflow is in `.github/workflows/rentman-led-check.yml`. It runs once a week on Tuesday at 09:00 Pacific/Auckland time and can also be started manually from the GitHub Actions tab. Manual runs support a `dry_run` option that prints the Slack message without sending it.
+
+GitHub schedules are UTC-only, so the workflow has two weekly UTC triggers and a local-time gate. One trigger matches New Zealand standard time and the other matches daylight saving time; only the matching Tuesday 09:00 local run continues to the checker.
 
 ## Matching
 
@@ -39,6 +41,8 @@ Useful workflow/script environment variables:
 - `LOOKAHEAD_DAYS`: leave empty for all future projects, or set a number such as `90`.
 - `SLACK_NOTIFY_ON_EMPTY`: set to `true` if you want a Slack confirmation when no projects need warning.
 - `RENTMAN_PROJECT_URL_TEMPLATE`: optional Slack link template, for example `https://example.rentmanapp.com/projects/{id}`.
+
+The Slack message includes each project's Rentman status, type, account manager, planning period, and matched LED equipment.
 
 ## Local Checks
 

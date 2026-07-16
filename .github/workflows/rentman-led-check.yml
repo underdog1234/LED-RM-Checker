@@ -12,9 +12,11 @@ on:
           - "false"
           - "true"
   schedule:
-    # 06:00 in New Zealand during standard time. The script uses Pacific/Auckland
-    # when deciding what counts as today.
-    - cron: "0 18 * * *"
+    # GitHub cron is UTC-only. These are the two possible UTC equivalents of
+    # Tuesday 09:00 in Pacific/Auckland; the schedule gate below makes only the
+    # matching local-time run execute the checker.
+    - cron: "0 20 * * 1"
+    - cron: "0 21 * * 1"
 
 jobs:
   check-led-equipment:
@@ -40,11 +42,32 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: Confirm Tuesday 09:00 NZ schedule
+        id: schedule_gate
+        if: github.event_name == 'schedule'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import datetime as dt
+          import os
+          from zoneinfo import ZoneInfo
+
+          now = dt.datetime.now(ZoneInfo("Pacific/Auckland"))
+          should_run = now.weekday() == 1 and now.hour == 9
+          print(f"Local time: {now:%A %d/%m/%Y %H:%M %Z}")
+          print(f"run={'true' if should_run else 'false'}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"run={'true' if should_run else 'false'}\n")
+          PY
+
       - name: Verify equipment sheet can be read
+        if: github.event_name != 'schedule' || steps.schedule_gate.outputs.run == 'true'
         run: python scripts/check_rentman_led.py --print-targets
 
       - name: Run checker unit tests
+        if: github.event_name != 'schedule' || steps.schedule_gate.outputs.run == 'true'
         run: python -m unittest discover -s tests -p 'test_*.py'
 
       - name: Check Rentman projects
+        if: github.event_name != 'schedule' || steps.schedule_gate.outputs.run == 'true'
         run: python scripts/check_rentman_led.py

@@ -24,7 +24,7 @@ DEFAULT_EQUIPMENT_FILE = Path("data/Export_Equipment_20260715.xlsx")
 DEFAULT_MATCH_COLUMNS = ("Code", "Name (in database)", "General Name")
 DEFAULT_PROJECT_FIELDS = (
     "id,name,number,reference,displayname,planperiod_start,planperiod_end,"
-    "usageperiod_start,usageperiod_end,tags,status,project_type"
+    "usageperiod_start,usageperiod_end,tags,status,project_type,account_manager"
 )
 DEFAULT_PROJECT_EQUIPMENT_FIELDS = (
     "id,name,displayname,quantity,quantity_total,equipment,planperiod_start,planperiod_end"
@@ -33,7 +33,7 @@ DEFAULT_SUBPROJECT_FIELDS = (
     "id,name,status,planperiod_start,planperiod_end,usageperiod_start,usageperiod_end"
 )
 DEFAULT_REQUIRED_TAG = "tec\u2714\ufe0f"
-DEFAULT_PROJECT_EXPAND = "project_type"
+DEFAULT_PROJECT_EXPAND = "project_type,account_manager"
 DEFAULT_SUBPROJECT_EXPAND = "status"
 DEFAULT_PROJECT_URL_TEMPLATE = "https://multimedia.rentmanapp.com/#/projects/{id}/details"
 STATUS_DETAILS = {
@@ -439,6 +439,18 @@ def project_type_summary(project: dict[str, Any]) -> str:
     return f"{nearest_color_emoji(color or '')} {name}"
 
 
+def project_account_manager_name(project: dict[str, Any]) -> str:
+    account_manager = project.get("account_manager")
+    if isinstance(account_manager, dict):
+        for key in ("displayname", "name", "vt_fullname", "full_name", "fullname", "email", "id"):
+            value = account_manager.get(key)
+            if value not in (None, ""):
+                return str(value).strip()
+    if account_manager not in (None, ""):
+        return str(account_manager).strip()
+    return "Not assigned"
+
+
 def candidate_equipment_identifiers(item: dict[str, Any]) -> list[tuple[str, str]]:
     equipment = item.get("equipment") if isinstance(item.get("equipment"), dict) else {}
     candidates = {
@@ -682,6 +694,7 @@ def format_slack_message(findings: list[Finding], required_tag: str, timezone: d
         status_emoji, status_label = project_status_details(project)
         lines.append(f"Status: {status_emoji} {status_label}")
         lines.append(f"Type: {project_type_summary(project)}")
+        lines.append(f"Account manager: {project_account_manager_name(project)}")
         lines.append(f"Planning period: {project_date_summary(project, timezone)}")
         lines.append("Matched equipment:")
         for match in finding.matches[:10]:

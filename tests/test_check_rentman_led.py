@@ -69,6 +69,7 @@ class CheckRentmanLedTests(unittest.TestCase):
                 "name": "Conference",
                 "status": "/statuses/3",
                 "project_type": {"name": "Conference", "color": "ec00a3"},
+                "account_manager": {"displayname": "Scotty Berry"},
                 "planperiod_start": "2026-10-17T00:00:00+13:00",
                 "planperiod_end": "2026-10-18T23:59:00+13:00",
             },
@@ -90,7 +91,17 @@ class CheckRentmanLedTests(unittest.TestCase):
         self.assertIn("Status: 👍 Confirmed", message)
         self.assertIn("Type: ", message)
         self.assertIn("Conference", message)
+        self.assertIn("Account manager: Scotty Berry", message)
         self.assertIn("Planning period: 17/10/2026 00:00 to 18/10/2026 23:59", message)
+
+    def test_project_account_manager_name_uses_expanded_crew_name(self):
+        self.assertEqual(
+            checker.project_account_manager_name(
+                {"account_manager": {"vt_fullname": "Joel Davidson"}}
+            ),
+            "Joel Davidson",
+        )
+        self.assertEqual(checker.project_account_manager_name({}), "Not assigned")
 
     def test_exact_equipment_match_checks_equipment_code(self):
         target = checker.EquipmentTarget(
