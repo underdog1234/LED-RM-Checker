@@ -213,7 +213,10 @@ def parse_datetime(value: Any, timezone: dt.tzinfo) -> dt.datetime | None:
         return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone)
-    return parsed.astimezone(timezone)
+    try:
+        return parsed.astimezone(timezone)
+    except OverflowError:
+        return None
 
 
 def project_is_upcoming(

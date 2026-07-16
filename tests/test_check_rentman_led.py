@@ -31,6 +31,10 @@ class CheckRentmanLedTests(unittest.TestCase):
             checker.project_is_upcoming(project, dt.date(2026, 7, 17), timezone, None)
         )
 
+    def test_parse_datetime_ignores_timezone_overflow(self):
+        timezone = dt.timezone(dt.timedelta(hours=13))
+        self.assertIsNone(checker.parse_datetime("9999-12-31T23:59:59+00:00", timezone))
+
     def test_exact_equipment_match_checks_equipment_code(self):
         target = checker.EquipmentTarget(
             row_number=2,
