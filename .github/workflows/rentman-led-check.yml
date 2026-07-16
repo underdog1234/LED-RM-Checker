@@ -23,7 +23,7 @@ jobs:
     env:
       RENTMAN_API_TOKEN: ${{ secrets.RENTMAN_API_TOKEN }}
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-      SLACK_USER_ID: ${{ vars.SLACK_USER_ID }}
+      SLACK_USER_ID: ${{ vars.SLACK_USER_ID || secrets.SLACK_USER_ID }}
       TIMEZONE: Pacific/Auckland
       EQUIPMENT_FILE: data/Export_Equipment_20260715.xlsx
       EQUIPMENT_MATCH_COLUMNS: "Code,Name (in database),General Name"

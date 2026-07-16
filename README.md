@@ -16,7 +16,7 @@ Add these repository secrets:
 - `RENTMAN_API_TOKEN`: Rentman API token.
 - `SLACK_BOT_TOKEN`: Slack bot token with permission to send messages.
 
-Add this repository variable:
+Add this repository variable or secret:
 
 - `SLACK_USER_ID`: Slack user ID to message, for example `UFM0TTNHX`.
 
