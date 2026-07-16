@@ -1,0 +1,50 @@
+name: Rentman LED equipment check
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview output without posting to Slack"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+  schedule:
+    # 06:00 in New Zealand during standard time. The script uses Pacific/Auckland
+    # when deciding what counts as today.
+    - cron: "0 18 * * *"
+
+jobs:
+  check-led-equipment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RENTMAN_API_TOKEN: ${{ secrets.RENTMAN_API_TOKEN }}
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      SLACK_USER_ID: ${{ vars.SLACK_USER_ID }}
+      TIMEZONE: Pacific/Auckland
+      EQUIPMENT_FILE: data/Export_Equipment_20260715.xlsx
+      EQUIPMENT_MATCH_COLUMNS: "Code,Name (in database),General Name"
+      REQUIRED_TAG: "tec✔️"
+      MATCH_MODE: exact
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Verify equipment sheet can be read
+        run: python scripts/check_rentman_led.py --print-targets
+
+      - name: Run checker unit tests
+        run: python -m unittest discover -s tests -p 'test_*.py'
+
+      - name: Check Rentman projects
+        run: python scripts/check_rentman_led.py
