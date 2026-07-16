@@ -24,12 +24,79 @@ DEFAULT_EQUIPMENT_FILE = Path("data/Export_Equipment_20260715.xlsx")
 DEFAULT_MATCH_COLUMNS = ("Code", "Name (in database)", "General Name")
 DEFAULT_PROJECT_FIELDS = (
     "id,name,number,reference,displayname,planperiod_start,planperiod_end,"
-    "usageperiod_start,usageperiod_end,tags,status"
+    "usageperiod_start,usageperiod_end,tags,status,project_type"
 )
 DEFAULT_PROJECT_EQUIPMENT_FIELDS = (
     "id,name,displayname,quantity,quantity_total,equipment,planperiod_start,planperiod_end"
 )
+DEFAULT_SUBPROJECT_FIELDS = (
+    "id,name,status,planperiod_start,planperiod_end,usageperiod_start,usageperiod_end"
+)
 DEFAULT_REQUIRED_TAG = "tec\u2714\ufe0f"
+DEFAULT_PROJECT_EXPAND = "project_type"
+DEFAULT_SUBPROJECT_EXPAND = "status"
+DEFAULT_PROJECT_URL_TEMPLATE = "https://multimedia.rentmanapp.com/#/projects/{id}/details"
+STATUS_DETAILS = {
+    "/statuses/1": ("\u23f3", "Pending"),
+    "/statuses/2": ("\u274c", "Cancelled"),
+    "/statuses/3": ("\U0001f44d", "Confirmed"),
+    "/statuses/4": ("\U0001f4e6", "Prepped"),
+    "/statuses/5": ("\U0001f4cd", "On location"),
+    "/statuses/6": ("\U0001f69a", "Returned"),
+    "/statuses/7": ("\U0001f5d3\ufe0f", "Inquiry"),
+    "/statuses/8": ("\U0001f4dd", "Concept"),
+}
+PROJECT_TYPE_COLORS = {
+    "011 Production": "cf9dff",
+    "Dryhire": "8F53F2",
+    "Internal rental project": "000000",
+    "Transferproject": "c8c8c8",
+    "Conference": "ec00a3",
+    "Award Show": "08d400",
+    "Meeting": "1e27f2",
+    "Product launch": "e1ed10",
+    "Dinner": "4a36f9",
+    "Expo": "47dcdc",
+    "Warehouse": "8db0b8",
+    "Conference and Dinner": "221be3",
+    "Equipment Hire/ Delivery": "000000",
+    "AGM": "2fe8ec",
+    "Cocktail": "fade1f",
+    "Roadshow": "faf833",
+    "Training": "000000",
+    "Wedding": "012340",
+    "003 Christchurch": "ff1424",
+    "001 Auckland": "2c4bf9",
+    "002 Wellington": "43d226",
+    "SOA sent": "bc85c1",
+    "Completed": "40d228",
+    "001c GMA": "da9694",
+    "005 Te Pae": "fc5d58",
+    "006 Parliament": "fbf373",
+    "001b DDEC": "ffff00",
+    "Choose a Location": "000000",
+    "001a Auckland Museum": "fc9b25",
+    "Public Holiday": "ff9ee4",
+    "012 Long Term Hire": "000000",
+    "001aa Akl Dry Hire": "b8b8cc",
+    "002a WLG Dry Hire": "dedef6",
+    "003a CHC Dry Hire": "dedef6",
+    "000a Multiple Locations": "6713B0",
+    "001d Staff Dry Hire": "c8c8c8",
+    "Production": "cf9dff",
+    "CHC": "ff1424",
+    "Newmarket": "2c4bf9",
+    "WEL": "43d226",
+    "GMA": "da9694",
+    "Te Pae": "fc5d58",
+    "Parliament": "fbf373",
+    "DDEC": "ffff00",
+    "AWMMM": "fc9b25",
+    "Long Term Hire": "000000",
+    "DH": "b8b8cc",
+    "\U0001f4cd\U0001f4cd": "6713B0",
+    "??": "000000",
+}
 NS_MAIN = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 NS_REL = {
     "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
@@ -259,11 +326,117 @@ def tag_is_present(raw_tags: Any, required_tag: str) -> bool:
     return any(normalize(tag) == required for tag in tag_values)
 
 
-def project_status(project: dict[str, Any]) -> str:
-    status = project.get("status")
+def resource_path(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        for key in ("path", "url", "href"):
+            if value.get(key):
+                return str(value[key]).strip()
+        if value.get("id") not in (None, ""):
+            return f"/statuses/{value['id']}"
+    return str(value).strip()
+
+
+def effective_project_status_value(project: dict[str, Any]) -> Any:
+    if project.get("status") not in (None, ""):
+        return project.get("status")
+    subprojects = project.get("_subprojects")
+    if isinstance(subprojects, list) and subprojects:
+        return subprojects[0].get("status")
+    return None
+
+
+def project_status_key(project: dict[str, Any]) -> str:
+    status = effective_project_status_value(project)
+    path = resource_path(status)
+    if path:
+        return path
     if isinstance(status, dict):
-        return normalize(status.get("name") or status.get("displayname") or status.get("id"))
-    return normalize(status)
+        return str(status.get("name") or status.get("displayname") or "").strip()
+    return str(status or "").strip()
+
+
+def project_status_details(project: dict[str, Any]) -> tuple[str, str]:
+    status = effective_project_status_value(project)
+    key = project_status_key(project)
+    normalized_key = normalize(key)
+    for status_key, details in STATUS_DETAILS.items():
+        if normalized_key == normalize(status_key):
+            return details
+    if isinstance(status, dict):
+        label = str(status.get("name") or status.get("displayname") or status.get("id") or "").strip()
+        if label:
+            return ("\u2139\ufe0f", label)
+    if key:
+        return ("\u2139\ufe0f", key)
+    return ("\u2139\ufe0f", "Status unknown")
+
+
+def project_status(project: dict[str, Any]) -> str:
+    _emoji, label = project_status_details(project)
+    return normalize(label)
+
+
+def project_is_cancelled(project: dict[str, Any]) -> bool:
+    emoji, label = project_status_details(project)
+    return emoji == "\u274c" or normalize(label) == "cancelled"
+
+
+def project_type_name(project: dict[str, Any]) -> str:
+    project_type = project.get("project_type")
+    if isinstance(project_type, dict):
+        return str(
+            project_type.get("name")
+            or project_type.get("displayname")
+            or project_type.get("label")
+            or project_type.get("id")
+            or ""
+        ).strip()
+    return str(project_type or "").strip()
+
+
+def nearest_color_emoji(hex_color: str) -> str:
+    raw = re.sub(r"[^0-9a-fA-F]", "", str(hex_color or ""))
+    if not raw or int(raw or "0", 16) == 0:
+        return "\u2b1b"
+    raw = raw[-6:].zfill(6)
+    rgb = tuple(int(raw[index : index + 2], 16) for index in (0, 2, 4))
+    palette = (
+        ("\U0001f7e5", (255, 0, 0)),
+        ("\U0001f7e7", (255, 128, 0)),
+        ("\U0001f7e8", (255, 230, 0)),
+        ("\U0001f7e9", (0, 180, 0)),
+        ("\U0001f7e6", (0, 120, 255)),
+        ("\U0001f7ea", (150, 65, 200)),
+        ("\u2b1b", (0, 0, 0)),
+        ("\u2b1c", (220, 220, 220)),
+        ("\U0001f7eb", (120, 70, 25)),
+    )
+    return min(
+        palette,
+        key=lambda item: sum((rgb[index] - item[1][index]) ** 2 for index in range(3)),
+    )[0]
+
+
+def project_type_summary(project: dict[str, Any]) -> str:
+    name = project_type_name(project)
+    if not name:
+        return "\u2b1b Type unknown"
+    project_type = project.get("project_type")
+    color = None
+    if isinstance(project_type, dict):
+        color = (
+            project_type.get("color")
+            or project_type.get("colour")
+            or project_type.get("hex_color")
+            or project_type.get("hexColour")
+        )
+    if color is None:
+        color = PROJECT_TYPE_COLORS.get(name)
+    if color is None:
+        color = PROJECT_TYPE_COLORS.get(str(project_type or ""))
+    return f"{nearest_color_emoji(color or '')} {name}"
 
 
 def candidate_equipment_identifiers(item: dict[str, Any]) -> list[tuple[str, str]]:
@@ -410,6 +583,7 @@ def find_projects_to_warn(
         "projects",
         {
             "fields": os.environ.get("PROJECT_FIELDS", DEFAULT_PROJECT_FIELDS),
+            "expand": os.environ.get("PROJECT_EXPAND", DEFAULT_PROJECT_EXPAND),
         },
     )
     findings: list[Finding] = []
@@ -417,6 +591,18 @@ def find_projects_to_warn(
         if excluded_statuses and project_status(project) in excluded_statuses:
             continue
         if not project_is_upcoming(project, today, timezone, lookahead_days):
+            continue
+        project["_subprojects"] = client.list_endpoint(
+            f"projects/{project['id']}/subprojects",
+            {
+                "fields": os.environ.get("SUBPROJECT_FIELDS", DEFAULT_SUBPROJECT_FIELDS),
+                "expand": os.environ.get("SUBPROJECT_EXPAND", DEFAULT_SUBPROJECT_EXPAND),
+            },
+            path_vars={"id": project["id"]},
+        )
+        if project_is_cancelled(project):
+            continue
+        if excluded_statuses and project_status(project) in excluded_statuses:
             continue
         if tag_is_present(project.get("tags"), required_tag):
             continue
@@ -442,25 +628,46 @@ def find_projects_to_warn(
 def project_label(project: dict[str, Any]) -> str:
     number = project.get("number")
     name = project.get("displayname") or project.get("name") or "Unnamed project"
-    return f"#{number} {name}" if number not in (None, "") else str(name)
+    url = project_url(project)
+    if number not in (None, ""):
+        number_label = f"#{number}"
+        if url:
+            number_label = f"<{url}|{number_label}>"
+        return f"{number_label} {name}"
+    if url:
+        return f"<{url}|{name}>"
+    return str(name)
 
 
-def project_date_summary(project: dict[str, Any]) -> str:
-    start = project.get("planperiod_start") or project.get("usageperiod_start") or ""
-    end = project.get("planperiod_end") or project.get("usageperiod_end") or ""
+def format_human_datetime(value: Any, timezone: dt.tzinfo) -> str:
+    parsed = parse_datetime(value, timezone)
+    if parsed is None:
+        return ""
+    return parsed.strftime("%d/%m/%Y %H:%M")
+
+
+def project_date_summary(project: dict[str, Any], timezone: dt.tzinfo) -> str:
+    start = format_human_datetime(
+        project.get("planperiod_start") or project.get("usageperiod_start"),
+        timezone,
+    )
+    end = format_human_datetime(
+        project.get("planperiod_end") or project.get("usageperiod_end"),
+        timezone,
+    )
     if start and end:
         return f"{start} to {end}"
-    return str(start or end or "date not set")
+    return start or end or "date not set"
 
 
 def project_url(project: dict[str, Any]) -> str | None:
-    template = os.environ.get("RENTMAN_PROJECT_URL_TEMPLATE")
+    template = os.environ.get("RENTMAN_PROJECT_URL_TEMPLATE", DEFAULT_PROJECT_URL_TEMPLATE)
     if not template:
         return None
     return template.format(**{key: value or "" for key, value in project.items()})
 
 
-def format_slack_message(findings: list[Finding], required_tag: str) -> str:
+def format_slack_message(findings: list[Finding], required_tag: str, timezone: dt.tzinfo) -> str:
     if not findings:
         return "Rentman LED check: no upcoming projects need the LED tech tag."
 
@@ -471,11 +678,11 @@ def format_slack_message(findings: list[Finding], required_tag: str) -> str:
     for finding in findings:
         project = finding.project
         label = project_label(project)
-        url = project_url(project)
-        if url:
-            label = f"<{url}|{label}>"
         lines.append(f"\n*{label}*")
-        lines.append(f"Plan period: {project_date_summary(project)}")
+        status_emoji, status_label = project_status_details(project)
+        lines.append(f"Status: {status_emoji} {status_label}")
+        lines.append(f"Type: {project_type_summary(project)}")
+        lines.append(f"Planning period: {project_date_summary(project, timezone)}")
         lines.append("Matched equipment:")
         for match in finding.matches[:10]:
             qty = f" x{match.quantity}" if match.quantity not in (None, "") else ""
@@ -603,7 +810,7 @@ def main() -> int:
         required_tag=required_tag,
         match_mode=match_mode,
     )
-    message = format_slack_message(findings, required_tag)
+    message = format_slack_message(findings, required_tag, timezone)
 
     print(
         json.dumps(
